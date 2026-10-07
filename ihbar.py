@@ -1,35 +1,36 @@
+import os
+from threading import Thread
 import discord
 from discord.ext import commands
-import os
 from flask import Flask
-from threading import Thread
 
-# 1. Render Uyanık Tutma (Keep-Alive) Web Sunucusu
+# Render uyanık tutma (Keep-Alive) web sunucusu
 app = Flask('')
 
 @app.route('/')
 def home():
-    return "İhbar botu 7/24 aktif ve çalışıyor!"
+    return "İhbar botu 7/24 aktif!"
 
-def run():
-    # Render'ın otomatik atadığı PORT değerini dinler
+def run_flask():
     port = int(os.environ.get('PORT', 8080))
     app.run(host='0.0.0.0', port=port)
 
-Thread(target=run).start()
+def keep_alive():
+    t = Thread(target=run_flask)
+    t.daemon = True
+    t.start()
 
-# 2. Bot Ayarları
+# Bot ayarları
 intents = discord.Intents.default()
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# 3. İhbar Formu (Modal)
 class IhbarModal(discord.ui.Modal):
     def __init__(self):
         super().__init__(title='🚨 Anonim İhbar Formu')
 
         self.hedef = discord.ui.TextInput(
             label='İhbar Edilen Kişi / Kullanıcı ID',
-            placeholder='Örn: Kullanıcı adı veya ID girin...',
+            placeholder='Örn: Kullanıcı adı veya ID...',
             required=True
         )
         self.sebep = discord.ui.TextInput(
@@ -43,13 +44,11 @@ class IhbarModal(discord.ui.Modal):
         self.add_item(self.sebep)
 
     async def on_submit(self, interaction: discord.Interaction):
-        # Kullanıcıya özel (ephemeral) gizli onay bildirimi
         await interaction.response.send_message(
-            "🔒 **İhbarınız başarıyla alındı!**\nİhbarınız tamamen **anonim** olarak kaydedilmiştir, kimlik bilgileriniz yetkililer dahil kimseyle paylaşılmaz.",
+            "🔒 **İhbarınız başarıyla alındı!** Bilgileriniz %100 anonim olarak kaydedilmiştir.",
             ephemeral=True
         )
 
-# 4. Kırmızı Alarm Buton Paneli
 class IhbarView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -63,35 +62,34 @@ class IhbarView(discord.ui.View):
     async def ihbar_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(IhbarModal())
 
-# 5. Slash Komutu (/ihbar-paneli)
 @bot.tree.command(name="ihbar-paneli", description="Anonim ihbar panelini açar")
 async def ihbar_paneli(interaction: discord.Interaction):
     embed = discord.Embed(
         title="🚨 **ANONİM İHBAR SİSTEMİ** 🚨",
         description=(
-            "Sunucu içerisindeki kural ihlallerini, şüpheli durumları veya bildirmek istediğiniz "
-            "olayları aşağıdaki butona tıklayarak bildirebilirsiniz.\n\n"
-            "🔒 **Gizlilik ve Anonimlik Garantisi:**\n"
+            "Sunucu içerisindeki kural ihlallerini aşağıdaki butona tıklayarak bildirebilirsiniz.\n\n"
+            "🔒 **Gizlilik Garantisi:**\n"
             "• Yapılan tüm ihbarlar **%100 anonimdir**.\n"
-            "• Kullanıcı adınız, ID'niz veya profil bilgileriniz sistem tarafından **asla kaydedilmez**.\n"
-            "• Güvenle bildirimde bulunabilirsiniz."
+            "• Kullanıcı bilgileriniz kaydedilmez."
         ),
         color=discord.Color.red()
     )
     embed.set_footer(text="Anonim İhbar Servisi • 7/24 Aktif")
     await interaction.response.send_message(embed=embed, view=IhbarView())
 
-# 6. Bot Hazır Olduğunda
 @bot.event
 async def on_ready():
-    bot.add_view(IhbarView())  # Bot yeniden başlasa da butonların çalışmasını sağlar
-    await bot.tree.sync()
+    bot.add_view(IhbarView())
+    try:
+        await bot.tree.sync()
+    except Exception as e:
+        print(f"Eşitleme hatası: {e}")
     print(f'{bot.user} başarıyla aktif edildi!')
 
-# 7. Render Üzerinden Token Okuma
-TOKEN = os.environ.get('BOT_TOKEN')
-
-if TOKEN:
-    bot.run(TOKEN)
-else:
-    print("HATA: 'BOT_TOKEN' adında bir ortam değişkeni (Environment Variable) bulunamadı!")
+if __name__ == "__main__":
+    keep_alive()
+    TOKEN = os.environ.get('BOT_TOKEN')
+    if TOKEN:
+        bot.run(TOKEN)
+    else:
+        print("HATA: 'BOT_TOKEN' ortam değişkeni bulunamadı!")
